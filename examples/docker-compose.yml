@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - frontend
+      - backend
+
+  api:
+    image: mcr.microsoft.com/dotnet/aspnet:6.0
+    depends_on:
+      - db
+    networks:
+      - backend
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Passw0rd
+    networks:
+      - backend
+
+networks:
+  frontend:
+  backend:

@@ -13,7 +13,7 @@ This project is currently under active development. We provide security updates 
 If you discover a security vulnerability within this project, please follow these steps:
 
 1. **Do Not** open a public issue
-2. Send a private email to [your-email@example.com] (replace with your email)
+2. Send a private email to [peter.winther@gmail.com] (replace with your email)
 3. Include:
    - A description of the vulnerability
    - Steps to reproduce
