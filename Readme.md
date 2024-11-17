@@ -139,6 +139,55 @@ For issues or questions:
 3. Run as administrator
 4. Check for circular dependencies
 
+## Contributing
+
+Want to contribute? Here's how:
+
+1. **Fork the Repository**
+   - Click the 'Fork' button at the top right of this page
+   - This creates a copy of the repository in your GitHub account
+
+2. **Clone Your Fork**
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/docker-graceful-shutdown-for-windows.git
+   cd docker-graceful-shutdown-for-windows
+   ```
+
+3. **Create a Branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   # or
+   git checkout -b fix/your-fix-name
+   ```
+   Name your branch based on what you're working on:
+   - Use `feature/` prefix for new features
+   - Use `fix/` prefix for bug fixes
+
+4. **Make Your Changes**
+   - Make your changes to the code
+   - Test your changes thoroughly
+   - Commit your changes with clear messages:
+     ```bash
+     git add .
+     git commit -m "Add: detailed description of your changes"
+     ```
+
+5. **Push to Your Fork**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+6. **Create a Pull Request**
+   - Go to your fork on GitHub
+   - Click 'New Pull Request'
+   - Select your branch and submit the PR
+   - Provide a clear description of your changes
+
+7. **Code Review**
+   - Wait for review from the maintainers
+   - Make any requested changes
+   - Your PR will be merged when approved
+
 ## License
 
 MIT License - Feel free to modify and distribute
