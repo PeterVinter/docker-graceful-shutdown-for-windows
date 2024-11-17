@@ -65,14 +65,19 @@ Creates a visual progress indicator for each container being shut down.
 
 ```powershell
 function Get-ContainerDependencies {
-    # Checks for:
-    # 1. Network mode dependencies
-    # 2. Container links
-    # 3. Docker Compose dependencies
+    # Detects dependencies through:
+    # 1. Network mode dependencies (--network container:name)
+    # 2. Container links (--link)
+    # 3. Docker Compose dependencies (depends_on)
+    # 4. Shared networks (containers in same non-default network)
 }
 ```
 
-Maps out how containers depend on each other.
+The dependency detection system now includes:
+- Network-based dependency detection for containers sharing custom networks
+- Multi-network support for containers connected to multiple networks
+- Proper handling of Docker Compose relationships
+- Circular dependency detection and resolution
 
 ### Shutdown Order
 
@@ -192,6 +197,44 @@ Before submitting changes:
 2. Test with various container configurations
 3. Verify proper error handling
 4. Check script performance
+
+## Testing
+
+The project includes comprehensive test coverage using Pester framework and GitHub Actions:
+- Automated testing on Windows environments
+- Safe and isolated test execution
+- Extensive test scenarios
+
+For detailed testing information, see [tests/README.md](tests/README.md).
+
+## Examples
+
+The `/examples` directory contains several scenarios demonstrating the utility's capabilities:
+
+1. Basic Web Stack ([examples/basic-web](examples/basic-web))
+   - Simple web application with database
+   - Basic network dependencies
+
+2. Microservices Architecture ([examples/microservices-example](examples/microservices-example))
+   - Multi-layer application architecture
+   - Complex network topology
+   - See directory README for details
+
+## Logging
+
+The utility includes comprehensive logging functionality:
+
+- File-based logging in `./logs`
+- Console output with color-coding
+- Multiple log levels (INFO, WARNING, ERROR, DEBUG)
+
+Enable verbose logging:
+```powershell
+$VerbosePreference = 'Continue'
+.\gracefully_shutdown_all_docker_containers.ps1
+```
+
+For more details about logging configuration, see [modules/Logging.psm1](modules/Logging.psm1).
 
 ## License
 

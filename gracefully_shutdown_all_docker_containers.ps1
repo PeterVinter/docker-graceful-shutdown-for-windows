@@ -16,31 +16,69 @@ function Show-Progress {
 
 # Rest of the script remains exactly the same...
 function Get-ContainerDependencies {
-    $containers = docker inspect $(docker ps -q) | ConvertFrom-Json
-    $dependencyMap = @{}
+    $runningContainers = docker ps -q
+    if (-not $runningContainers) {
+        return @{}
+    }
     
+    $containers = docker inspect $runningContainers | ConvertFrom-Json
+    $dependencyMap = @{}
+    $networkMap = @{}
+    
+    # First, build a map of networks and their containers
     foreach ($container in $containers) {
         $name = $container.Name.TrimStart('/')
-        $links = @()
+        
+        foreach ($network in $container.NetworkSettings.Networks.PSObject.Properties) {
+            $networkName = $network.Name
+            if (-not $networkMap.ContainsKey($networkName)) {
+                $networkMap[$networkName] = [System.Collections.ArrayList]@()
+            }
+            [void]$networkMap[$networkName].Add($name)
+        }
+    }
+    
+    # Now build the dependency map
+    foreach ($container in $containers) {
+        $name = $container.Name.TrimStart('/')
+        $links = [System.Collections.ArrayList]@()
         
         # Get container dependencies from NetworkMode
         if ($container.HostConfig.NetworkMode -match "^container:(.+)$") {
-            $links += $matches[1]
+            [void]$links.Add($matches[1])
         }
         
         # Get dependencies from Links
         if ($container.HostConfig.Links) {
-            $links += $container.HostConfig.Links | ForEach-Object {
+            $containerLinks = $container.HostConfig.Links | ForEach-Object {
                 $_ -split ':' | Select-Object -First 1
+            }
+            foreach ($link in $containerLinks) {
+                [void]$links.Add($link)
             }
         }
         
         # Get dependencies from DependsOn
         if ($container.Config.Labels.'com.docker.compose.depends_on') {
-            $links += $container.Config.Labels.'com.docker.compose.depends_on' -split ','
+            $dependsOn = $container.Config.Labels.'com.docker.compose.depends_on' -split ','
+            foreach ($dep in $dependsOn) {
+                [void]$links.Add($dep.Trim())
+            }
         }
         
-        $dependencyMap[$name] = $links
+        # Get dependencies from shared networks
+        foreach ($network in $container.NetworkSettings.Networks.PSObject.Properties) {
+            $networkName = $network.Name
+            if ($networkName -ne 'bridge' -and $networkMap.ContainsKey($networkName)) {
+                foreach ($networkContainer in $networkMap[$networkName]) {
+                    if ($networkContainer -ne $name) {
+                        [void]$links.Add($networkContainer)
+                    }
+                }
+            }
+        }
+        
+        $dependencyMap[$name] = $links | Select-Object -Unique
     }
     
     return $dependencyMap
