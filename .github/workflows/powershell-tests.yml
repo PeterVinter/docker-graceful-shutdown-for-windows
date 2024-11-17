@@ -1,0 +1,37 @@
+name: PowerShell Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Check PowerShell version
+      shell: pwsh
+      run: $PSVersionTable.PSVersion
+      
+    - name: Check Docker version
+      shell: pwsh
+      run: docker --version
+      
+    - name: Verify script syntax
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        foreach ($script in Get-ChildItem -Path . -Filter *.ps1) {
+          Write-Host "Checking $($script.Name)"
+          $null = [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$null)
+        }
+        
+    - name: Run PSScriptAnalyzer
+      shell: pwsh
+      run: |
+        Install-Module -Name PSScriptAnalyzer -Force
+        Invoke-ScriptAnalyzer -Path . -Recurse -Settings PSGallery
