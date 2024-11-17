@@ -1,5 +1,13 @@
 # Docker Graceful Shutdown Utility
 
+![License](https://img.shields.io/github/license/PeterVinter/docker-graceful-shutdown-for-windows)
+![Last Commit](https://img.shields.io/github/last-commit/PeterVinter/docker-graceful-shutdown-for-windows)
+![Stars](https://img.shields.io/github/stars/PeterVinter/docker-graceful-shutdown-for-windows)
+![Issues](https://img.shields.io/github/issues/PeterVinter/docker-graceful-shutdown-for-windows)
+![PowerShell](https://img.shields.io/badge/PowerShell-%235391FE.svg?style=flat&logo=powershell&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)
+
 A PowerShell-based utility for gracefully shutting down Docker containers with dependency awareness and visual progress tracking.
 
 ## Files Explained
