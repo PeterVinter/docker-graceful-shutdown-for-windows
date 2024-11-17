@@ -1,0 +1,19 @@
+# Windows system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# VS Code directory
+.vscode/
+
+# PowerShell
+*.ps1.log
