@@ -1,161 +1,226 @@
-# Function to show progress bar
+#Requires -Version 5.1
+
+<#
+.SYNOPSIS
+    Gracefully shuts down Docker containers respecting their dependencies.
+.DESCRIPTION
+    This script analyzes Docker container dependencies and performs a graceful shutdown
+    in the correct order to prevent issues with dependent services.
+.NOTES
+    File Name      : gracefully_shutdown_all_docker_containers.ps1
+    Prerequisite   : Docker Desktop must be running
+    Version        : 1.0
+#>
+
 function Show-Progress {
+    <#
+    .SYNOPSIS
+        Displays a progress bar for container operations.
+    .DESCRIPTION
+        Shows a visual progress bar with percentage and container status.
+    .PARAMETER ContainerName
+        The name of the container being processed.
+    .PARAMETER Status
+        The current status of the operation.
+    .EXAMPLE
+        Show-Progress -ContainerName "web-app" -Status "Shutting down"
+    #>
+    [CmdletBinding()]
     param (
-        [string]$containerName,
-        [string]$status
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [String]$ContainerName,
+        
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Status
     )
-    $progressBar = ''
+    
+    $ProgressBar = ''
     for ($i = 0; $i -le 100; $i += 5) {
-        $progressBar = '#' * ($i / 5)
-        Write-Host -NoNewline "`r    [$progressBar] ${i}% - $containerName : $status                    "
+        $ProgressBar = '#' * ($i / 5)
+        Write-Host -NoNewline "`r    [$ProgressBar] ${i}% - $ContainerName : $Status                    "
         Start-Sleep -Milliseconds 50
     }
-    Write-Host -NoNewline "`r    [####################] 100% - $containerName : Stopped                    "
+    Write-Host -NoNewline "`r    [####################] 100% - $ContainerName : Stopped                    "
     Write-Host
 }
 
-# Rest of the script remains exactly the same...
 function Get-ContainerDependencies {
-    $runningContainers = docker ps -q
-    if (-not $runningContainers) {
+    <#
+    .SYNOPSIS
+        Retrieves Docker container dependencies.
+    .DESCRIPTION
+        Analyzes Docker containers and their network connections to build a dependency map.
+    .OUTPUTS
+        System.Collections.Hashtable
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Hashtable])]
+    param()
+    
+    $RunningContainers = docker ps -q
+    if (-not $RunningContainers) {
         return @{}
     }
     
-    $containers = docker inspect $runningContainers | ConvertFrom-Json
-    $dependencyMap = @{}
-    $networkMap = @{}
+    $Containers = docker inspect $RunningContainers | ConvertFrom-Json
+    $DependencyMap = @{}
+    $NetworkMap = @{}
     
     # First, build a map of networks and their containers
-    foreach ($container in $containers) {
-        $name = $container.Name.TrimStart('/')
+    foreach ($Container in $Containers) {
+        $Name = $Container.Name.TrimStart('/')
         
-        foreach ($network in $container.NetworkSettings.Networks.PSObject.Properties) {
-            $networkName = $network.Name
-            if (-not $networkMap.ContainsKey($networkName)) {
-                $networkMap[$networkName] = [System.Collections.ArrayList]@()
+        foreach ($Network in $Container.NetworkSettings.Networks.PSObject.Properties) {
+            $NetworkName = $Network.Name
+            if (-not $NetworkMap.ContainsKey($NetworkName)) {
+                $NetworkMap[$NetworkName] = [System.Collections.ArrayList]@()
             }
-            [void]$networkMap[$networkName].Add($name)
+            [void]$NetworkMap[$NetworkName].Add($Name)
         }
     }
     
     # Now build the dependency map
-    foreach ($container in $containers) {
-        $name = $container.Name.TrimStart('/')
-        $links = [System.Collections.ArrayList]@()
+    foreach ($Container in $Containers) {
+        $Name = $Container.Name.TrimStart('/')
+        $Links = [System.Collections.ArrayList]@()
         
         # Get container dependencies from NetworkMode
-        if ($container.HostConfig.NetworkMode -match "^container:(.+)$") {
-            [void]$links.Add($matches[1])
+        if ($Container.HostConfig.NetworkMode -match "^container:(.+)$") {
+            [void]$Links.Add($matches[1])
         }
         
         # Get dependencies from Links
-        if ($container.HostConfig.Links) {
-            $containerLinks = $container.HostConfig.Links | ForEach-Object {
+        if ($Container.HostConfig.Links) {
+            $ContainerLinks = $Container.HostConfig.Links | ForEach-Object {
                 $_ -split ':' | Select-Object -First 1
             }
-            foreach ($link in $containerLinks) {
-                [void]$links.Add($link)
+            foreach ($Link in $ContainerLinks) {
+                [void]$Links.Add($Link)
             }
         }
         
         # Get dependencies from DependsOn
-        if ($container.Config.Labels.'com.docker.compose.depends_on') {
-            $dependsOn = $container.Config.Labels.'com.docker.compose.depends_on' -split ','
-            foreach ($dep in $dependsOn) {
-                [void]$links.Add($dep.Trim())
+        if ($Container.Config.Labels.'com.docker.compose.depends_on') {
+            $DependsOn = $Container.Config.Labels.'com.docker.compose.depends_on' -split ','
+            foreach ($Dep in $DependsOn) {
+                [void]$Links.Add($Dep.Trim())
             }
         }
         
         # Get dependencies from shared networks
-        foreach ($network in $container.NetworkSettings.Networks.PSObject.Properties) {
-            $networkName = $network.Name
-            if ($networkName -ne 'bridge' -and $networkMap.ContainsKey($networkName)) {
-                foreach ($networkContainer in $networkMap[$networkName]) {
-                    if ($networkContainer -ne $name) {
-                        [void]$links.Add($networkContainer)
+        foreach ($Network in $Container.NetworkSettings.Networks.PSObject.Properties) {
+            $NetworkName = $Network.Name
+            if ($NetworkName -ne 'bridge' -and $NetworkMap.ContainsKey($NetworkName)) {
+                foreach ($NetworkContainer in $NetworkMap[$NetworkName]) {
+                    if ($NetworkContainer -ne $Name) {
+                        [void]$Links.Add($NetworkContainer)
                     }
                 }
             }
         }
         
-        $dependencyMap[$name] = $links | Select-Object -Unique
+        $DependencyMap[$Name] = $Links | Select-Object -Unique
     }
     
-    return $dependencyMap
+    return $DependencyMap
 }
 
 function Get-ShutdownOrder {
+    <#
+    .SYNOPSIS
+        Determines the correct order for shutting down containers.
+    .DESCRIPTION
+        Uses a topological sort to determine the proper shutdown order based on container dependencies.
+    .PARAMETER DependencyMap
+        Hashtable containing container dependencies.
+    .OUTPUTS
+        System.Collections.ArrayList
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.ArrayList])]
     param (
         [Parameter(Mandatory = $true)]
-        [hashtable]$DependencyMap
+        [ValidateNotNull()]
+        [Hashtable]$DependencyMap
     )
     
-    $visited = @{}
-    $shutdownOrder = [System.Collections.ArrayList]@()
+    $Visited = @{}
+    $ShutdownOrder = [System.Collections.ArrayList]@()
     
     function Visit-Node {
-        param($node)
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory = $true)]
+            [String]$Node
+        )
         
-        if ($visited[$node] -eq 1) {
-            Write-Warning "Circular dependency detected at container: $node"
+        if ($Visited[$Node] -eq 1) {
+            Write-Warning "Circular dependency detected at container: $Node"
             return
         }
         
-        if ($visited[$node] -eq 2) { return }
+        if ($Visited[$Node] -eq 2) { return }
         
-        $visited[$node] = 1
-        foreach ($dep in $DependencyMap[$node]) {
-            if ($DependencyMap.ContainsKey($dep)) {
-                Visit-Node -node $dep
+        $Visited[$Node] = 1
+        foreach ($Dep in $DependencyMap[$Node]) {
+            if ($DependencyMap.ContainsKey($Dep)) {
+                Visit-Node -Node $Dep
             }
         }
-        $visited[$node] = 2
-        [void]$shutdownOrder.Add($node)
+        $Visited[$Node] = 2
+        [void]$ShutdownOrder.Add($Node)
     }
     
-    foreach ($container in $DependencyMap.Keys) {
-        if (-not $visited[$container]) {
-            Visit-Node -node $container
+    foreach ($Container in $DependencyMap.Keys) {
+        if (-not $Visited[$Container]) {
+            Visit-Node -Node $Container
         }
     }
     
-    return $shutdownOrder
+    return $ShutdownOrder
 }
 
 # Main script execution
 try {
+    $ErrorActionPreference = 'Stop'
+    
     Write-Host "Getting running containers and their dependencies..."
-    $dependencies = Get-ContainerDependencies
-    if ($dependencies.Count -eq 0) {
+    $Dependencies = Get-ContainerDependencies
+    if ($Dependencies.Count -eq 0) {
         Write-Host "No running containers found."
         exit 0
     }
     
     Write-Host "Calculating shutdown order..."
-    $shutdownOrder = Get-ShutdownOrder -DependencyMap $dependencies
+    $ShutdownOrder = Get-ShutdownOrder -DependencyMap $Dependencies
     
     Write-Host "Starting graceful shutdown in the following order:"
-    $shutdownOrder | ForEach-Object { Write-Host "  - $_" }
+    $ShutdownOrder | ForEach-Object { Write-Host "  - $_" }
     Write-Host ""
     
-    foreach ($container in $shutdownOrder) {
-        Write-Host "Processing container: $container"
+    foreach ($Container in $ShutdownOrder) {
+        Write-Host "Processing container: $Container"
         
         # Show initial progress
-        Show-Progress -containerName $container -status "Shutting down"
+        Show-Progress -ContainerName $Container -Status "Shutting down"
         
         # Send SIGTERM signal and wait for graceful shutdown
-        docker stop --time=30 $container
+        $StopResult = docker stop --time=30 $Container 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Warning: Failed to stop container $container gracefully"
-            Show-Progress -containerName $container -status "Force stopping"
-            docker kill $container
+            Write-Warning "Warning: Failed to stop container $Container gracefully. Error: $StopResult"
+            Show-Progress -ContainerName $Container -Status "Force stopping"
+            $KillResult = docker kill $Container 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to force stop container $Container. Error: $KillResult"
+            }
         }
     }
     
     Write-Host "`nAll containers have been stopped successfully."
 }
 catch {
-    Write-Error "An error occurred: $_"
+    Write-Error "An error occurred during container shutdown: $_"
     exit 1
 }

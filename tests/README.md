@@ -19,33 +19,41 @@ This directory contains tests for the Docker Graceful Shutdown utility.
    - Docker Compose dependency resolution
      * Direct dependencies via depends_on
      * Network-based implicit dependencies
-   - Complex multi-network scenarios
+   - Complex multi-tier scenarios
      * Microservices architecture simulation
      * Frontend/Backend separation
      * Database tier isolation
    - Dependency graph validation
    - Shutdown order verification
+   - Circular dependency detection
+   - Intelligent dependency resolution
 
 ## Test Safety
 
 All tests are designed to be safe and isolated:
-- Test containers use unique prefixed names (e.g., `test-graceful-shutdown-`)
-- Automatic cleanup after each test
+- Test containers use unique prefixed names (e.g., `test-graceful-`)
+- Automatic cleanup after each test run
 - No interference with existing containers
 - Separate test networks and resources
 - Validation checks to prevent interaction with non-test containers
+- Error handling for container startup/shutdown
+- Timeout mechanisms for container operations
 
 ## Running Tests
 
 ### Prerequisites
 ```powershell
+# Requires PowerShell 5.1 or later
+#Requires -Version 5.1
+#Requires -Modules @{ ModuleName="Pester"; ModuleVersion="5.0.0" }
+
 # Install required modules
-Install-Module -Name Pester -Force -SkipPublisherCheck
+Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
 ```
 
 ### Local Testing
 ```powershell
-# Run all tests
+# Run all tests with detailed output
 Invoke-Pester ./tests/*.ps1 -Output Detailed
 
 # Run specific test categories
@@ -53,69 +61,87 @@ Invoke-Pester ./tests/Test-DockerGracefulShutdown.ps1 -Output Detailed
 Invoke-Pester ./tests/Test-Dependencies.ps1 -Output Detailed
 ```
 
-### Automated Testing
+### Test Structure
 
-This project uses GitHub Actions for automated testing on Windows environments. The workflow:
-1. Sets up Windows environment
-2. Installs required PowerShell modules
-3. Starts Docker Desktop
-4. Runs all test categories
-5. Reports test results
+The tests follow PowerShell best practices:
+- Comment-based help for all test files
+- Proper function documentation
+- Type declarations for parameters
+- Error handling with try-catch blocks
+- Cleanup in finally blocks
+- Helper functions for common operations
+- Descriptive test contexts and names
 
-The GitHub Actions workflow configuration can be found in `.github/workflows/test-powershell.yml`.
+## Test Scenarios
 
-## Test Examples
-
-### Basic Container Test
+### Network Dependencies Test
 ```powershell
-Describe "Basic Container Operations" {
-    It "Should gracefully stop a single container" {
-        # Test code here
+Describe "Container Dependency Tests" {
+    Context "When testing network dependencies" {
+        It "Should detect containers in the same network" {
+            # Tests basic network dependency detection
+        }
     }
 }
 ```
 
-### Dependency Test
+### Docker Compose Dependencies Test
 ```powershell
-Describe "Container Dependencies" {
-    It "Should detect network dependencies" {
-        # Test code here
+Context "When testing Docker Compose style dependencies" {
+    It "Should detect network-based dependencies" {
+        # Tests compose-style dependency resolution
+    }
+}
+```
+
+### Complex Multi-Tier Test
+```powershell
+Context "When testing complex multi-tier dependencies" {
+    It "Should handle multiple network dependencies" {
+        # Tests complex microservices scenarios
     }
 }
 ```
 
 ## Test Coverage
 
-The dependency tests now cover:
-1. **Basic Network Dependencies**
-   - Containers in the same network
-   - Network isolation verification
+The dependency tests cover:
+
+1. **Network Dependencies**
+   - Basic container networking
+   - Network isolation
+   - Cross-network communication
    - Default bridge network handling
 
 2. **Docker Compose Scenarios**
-   - Multi-tier application setups
-   - Network-based dependencies
-   - Service discovery patterns
+   - Multi-container applications
+   - Service dependencies
+   - Network-based service discovery
+   - Container startup order
 
 3. **Complex Dependencies**
-   - Multiple network attachments
-   - Cross-network dependencies
-   - Service mesh patterns
    - Microservices architectures
+   - Multi-tier applications
+   - Database dependencies
+   - Circular dependency detection
+   - Load balancer scenarios
+   - Shared resource management
 
-## Contributing Tests
+## Helper Functions
 
-When adding new tests:
-1. Follow the existing test structure
-2. Use descriptive test names
-3. Include cleanup in `AfterAll` blocks
-4. Add test documentation
-5. Verify safety measures
+The test suite includes several helper functions:
+- `Wait-ContainerStart`: Smart container startup detection
+- `New-TestContainer`: Creates containers for testing
+- `Remove-TestContainers`: Cleans up test containers
+- `Test-ContainerNetwork`: Validates network connectivity
+- `Get-ContainerDependencies`: Analyzes container dependencies
 
-## Troubleshooting
+## Error Handling
 
-Common issues and solutions:
-1. Docker not running
-2. Permission issues
-3. Network conflicts
-4. Resource limitations
+Tests include comprehensive error handling:
+- Container startup failures
+- Network creation issues
+- Timeout scenarios
+- Resource cleanup
+- Invalid configurations
+- Network connectivity problems

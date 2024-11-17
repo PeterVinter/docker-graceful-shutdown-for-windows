@@ -1,25 +1,126 @@
-BeforeAll {
-    $scriptPath = Split-Path -Parent $PSScriptRoot
-    $mainScript = Join-Path $scriptPath "gracefully_shutdown_all_docker_containers.ps1"
-    . $mainScript
+#Requires -Version 5.1
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 
-    # Helper function to ensure test containers are cleaned up
+<#
+.SYNOPSIS
+    Tests for Docker container dependency detection and graceful shutdown.
+.DESCRIPTION
+    This Pester test suite validates the functionality of the Docker container
+    dependency detection and graceful shutdown script. It tests various scenarios
+    including network dependencies, Docker Compose dependencies, and complex
+    multi-container setups.
+.NOTES
+    File Name      : Test-Dependencies.ps1
+    Prerequisite   : Docker Desktop must be running
+                    Pester 5.0.0 or later
+    Version        : 1.0
+#>
+
+BeforeAll {
+    $ErrorActionPreference = 'Stop'
+    $ScriptPath = Split-Path -Parent $PSScriptRoot
+    $MainScript = Join-Path $ScriptPath "gracefully_shutdown_all_docker_containers.ps1"
+    . $MainScript
+
     function Remove-TestContainers {
+        <#
+        .SYNOPSIS
+            Cleans up test containers and networks.
+        .DESCRIPTION
+            Removes all test containers and networks created during testing,
+            identified by the 'test-graceful-' prefix.
+        #>
+        [CmdletBinding()]
+        param()
+        
         Write-Host "Cleaning up test containers..."
-        docker ps -a --filter "name=test-graceful-" -q | ForEach-Object { 
-            docker stop $_ 2>$null
-            docker rm $_ 2>$null 
+        try {
+            $TestContainers = docker ps -a --filter "name=test-graceful-" -q
+            if ($TestContainers) {
+                $TestContainers | ForEach-Object { 
+                    docker stop $_ 2>$null
+                    docker rm $_ 2>$null 
+                }
+            }
+
+            $TestNetworks = docker network ls --filter "name=test-graceful-" -q
+            if ($TestNetworks) {
+                $TestNetworks | ForEach-Object { 
+                    docker network rm $_ 2>$null 
+                }
+            }
         }
-        docker network ls --filter "name=test-graceful-" -q | ForEach-Object { 
-            docker network rm $_ 2>$null 
+        catch {
+            Write-Warning "Error during cleanup: $_"
         }
     }
 
-    # Helper function to verify container is running
     function Test-ContainerRunning {
-        param($containerName)
-        $status = docker inspect -f '{{.State.Running}}' $containerName 2>$null
-        return $status -eq 'true'
+        <#
+        .SYNOPSIS
+            Verifies if a Docker container is running.
+        .PARAMETER ContainerName
+            The name of the container to check.
+        .OUTPUTS
+            System.Boolean. True if the container is running, false otherwise.
+        #>
+        [CmdletBinding()]
+        [OutputType([bool])]
+        param(
+            [Parameter(Mandatory = $true)]
+            [ValidateNotNullOrEmpty()]
+            [string]$ContainerName
+        )
+        
+        try {
+            $Status = docker inspect -f '{{.State.Running}}' $ContainerName 2>$null
+            return $Status -eq 'true'
+        }
+        catch {
+            return $false
+        }
+    }
+
+    function Wait-ContainerStart {
+        <#
+        .SYNOPSIS
+            Waits for containers to be in running state.
+        .PARAMETER ContainerNames
+            Array of container names to check.
+        .PARAMETER TimeoutSeconds
+            Maximum time to wait for containers to start.
+        #>
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory = $true)]
+            [string[]]$ContainerNames,
+            
+            [Parameter()]
+            [int]$TimeoutSeconds = 30
+        )
+
+        $StartTime = Get-Date
+        $AllRunning = $false
+
+        while (-not $AllRunning -and ((Get-Date) - $StartTime).TotalSeconds -lt $TimeoutSeconds) {
+            $AllRunning = $true
+            foreach ($Container in $ContainerNames) {
+                if (-not (Test-ContainerRunning -ContainerName $Container)) {
+                    $AllRunning = $false
+                    Start-Sleep -Seconds 1
+                    break
+                }
+            }
+        }
+
+        foreach ($Container in $ContainerNames) {
+            if (Test-ContainerRunning -ContainerName $Container) {
+                Write-Host "Container $Container is running"
+            }
+            else {
+                throw "Container $Container failed to start within $TimeoutSeconds seconds"
+            }
+        }
     }
 
     # Clean up any leftover test containers before starting
@@ -27,24 +128,18 @@ BeforeAll {
 }
 
 Describe "Container Dependency Tests" {
-    Context "Network Dependencies" {
+    Context "When testing network dependencies" {
         BeforeAll {
             Write-Host "Setting up network dependencies test..."
+            
             # Create test containers with network dependencies
             docker network create test-graceful-network
             docker run -d --name test-graceful-db --network test-graceful-network nginx
             docker run -d --name test-graceful-api --network test-graceful-network nginx
             docker run -d --name test-graceful-web --network test-graceful-network nginx
-            Start-Sleep -Seconds 2
 
-            # Verify containers are running
-            $containers = @('test-graceful-db', 'test-graceful-api', 'test-graceful-web')
-            foreach ($container in $containers) {
-                if (-not (Test-ContainerRunning $container)) {
-                    throw "Container $container failed to start"
-                }
-                Write-Host "Container $container is running"
-            }
+            $TestContainers = @('test-graceful-db', 'test-graceful-api', 'test-graceful-web')
+            Wait-ContainerStart -ContainerNames $TestContainers
         }
 
         It "Should detect containers in the same network" {
@@ -52,13 +147,13 @@ Describe "Container Dependency Tests" {
             Write-Host "Currently running containers:"
             docker ps
             
-            $dependencies = Get-ContainerDependencies
-            Write-Host "Dependencies found: $($dependencies | ConvertTo-Json)"
-            $dependencies | Should -Not -BeNullOrEmpty
+            $Dependencies = Get-ContainerDependencies
+            Write-Host "Dependencies found: $($Dependencies | ConvertTo-Json)"
             
-            # Check if our test containers are in the dependencies
-            $testContainers = $dependencies.Keys | Where-Object { $_ -like "test-graceful-*" }
-            $testContainers.Count | Should -BeGreaterThan 0
+            # Verify dependencies
+            $Dependencies | Should -Not -BeNullOrEmpty
+            $TestContainers = $Dependencies.Keys | Where-Object { $_ -like "test-graceful-*" }
+            $TestContainers.Count | Should -BeGreaterThan 0
         }
 
         AfterAll {
@@ -66,44 +161,35 @@ Describe "Container Dependency Tests" {
         }
     }
 
-    Context "Docker Compose Dependencies" {
+    Context "When testing Docker Compose style dependencies" {
         BeforeAll {
             Write-Host "Setting up Docker Compose dependencies test..."
-            # Create a test compose environment
+            
+            # Create networks
             docker network create test-graceful-frontend
             docker network create test-graceful-backend
             
             # Create containers in specific order
             docker run -d --name test-graceful-db --network test-graceful-backend nginx
-            Start-Sleep -Seconds 1
             docker run -d --name test-graceful-api --network test-graceful-backend nginx
-            Start-Sleep -Seconds 1
             docker run -d --name test-graceful-web --network test-graceful-frontend --network test-graceful-backend nginx
-            Start-Sleep -Seconds 2
 
-            # Verify containers are running
-            $containers = @('test-graceful-db', 'test-graceful-api', 'test-graceful-web')
-            foreach ($container in $containers) {
-                if (-not (Test-ContainerRunning $container)) {
-                    throw "Container $container failed to start"
-                }
-                Write-Host "Container $container is running"
-            }
+            $TestContainers = @('test-graceful-db', 'test-graceful-api', 'test-graceful-web')
+            Wait-ContainerStart -ContainerNames $TestContainers
         }
 
         It "Should detect network-based dependencies" {
-            # List running containers for debugging
             Write-Host "Currently running containers:"
             docker ps
             
-            $dependencies = Get-ContainerDependencies
-            Write-Host "Dependencies found: $($dependencies | ConvertTo-Json)"
-            $dependencies | Should -Not -BeNullOrEmpty
+            $Dependencies = Get-ContainerDependencies
+            Write-Host "Dependencies found: $($Dependencies | ConvertTo-Json)"
             
-            # Web should depend on API and DB due to shared networks
-            $webDeps = $dependencies["test-graceful-web"]
-            $webDeps | Should -Contain "test-graceful-api"
-            $webDeps | Should -Contain "test-graceful-db"
+            # Verify dependencies
+            $Dependencies | Should -Not -BeNullOrEmpty
+            $WebDeps = $Dependencies["test-graceful-web"]
+            $WebDeps | Should -Contain "test-graceful-api"
+            $WebDeps | Should -Contain "test-graceful-db"
         }
 
         AfterAll {
@@ -111,58 +197,46 @@ Describe "Container Dependency Tests" {
         }
     }
 
-    Context "Complex Dependencies" {
+    Context "When testing complex multi-tier dependencies" {
         BeforeAll {
             Write-Host "Setting up complex dependencies test..."
-            # Create a more complex network topology
+            
+            # Create networks
             docker network create test-graceful-frontend
             docker network create test-graceful-backend
             
-            # Database tier
+            # Create containers for each tier
             docker run -d --name test-graceful-redis --network test-graceful-backend redis:alpine
             docker run -d --name test-graceful-mongodb --network test-graceful-backend mongo:latest
-            
-            # Application tier
             docker run -d --name test-graceful-api1 --network test-graceful-backend nginx
             docker run -d --name test-graceful-api2 --network test-graceful-backend nginx
-            
-            # Frontend tier
             docker run -d --name test-graceful-web1 --network test-graceful-frontend --network test-graceful-backend nginx
             docker run -d --name test-graceful-web2 --network test-graceful-frontend --network test-graceful-backend nginx
-            
-            Start-Sleep -Seconds 2
 
-            # Verify containers are running
-            $containers = @(
+            $TestContainers = @(
                 'test-graceful-redis', 'test-graceful-mongodb',
                 'test-graceful-api1', 'test-graceful-api2',
                 'test-graceful-web1', 'test-graceful-web2'
             )
-            foreach ($container in $containers) {
-                if (-not (Test-ContainerRunning $container)) {
-                    throw "Container $container failed to start"
-                }
-                Write-Host "Container $container is running"
-            }
+            Wait-ContainerStart -ContainerNames $TestContainers
         }
 
         It "Should handle multiple network dependencies" {
-            # List running containers for debugging
             Write-Host "Currently running containers:"
             docker ps
             
-            $dependencies = Get-ContainerDependencies
-            Write-Host "Dependencies found: $($dependencies | ConvertTo-Json)"
-            $dependencies | Should -Not -BeNullOrEmpty
+            $Dependencies = Get-ContainerDependencies
+            Write-Host "Dependencies found: $($Dependencies | ConvertTo-Json)"
             
-            # Frontend containers should depend on backend services
-            $web1Deps = $dependencies["test-graceful-web1"]
-            $web2Deps = $dependencies["test-graceful-web2"]
+            # Verify dependencies
+            $Dependencies | Should -Not -BeNullOrEmpty
+            $Web1Deps = $Dependencies["test-graceful-web1"]
+            $Web2Deps = $Dependencies["test-graceful-web2"]
             
-            $web1Deps | Should -Contain "test-graceful-api1"
-            $web1Deps | Should -Contain "test-graceful-api2"
-            $web2Deps | Should -Contain "test-graceful-api1"
-            $web2Deps | Should -Contain "test-graceful-api2"
+            $Web1Deps | Should -Contain "test-graceful-api1"
+            $Web1Deps | Should -Contain "test-graceful-api2"
+            $Web2Deps | Should -Contain "test-graceful-api1"
+            $Web2Deps | Should -Contain "test-graceful-api2"
         }
 
         AfterAll {
