@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # Frontend Layer
+  nginx-proxy:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - web-app
+      - api-gateway
+    networks:
+      - frontend
+
+  web-app:
+    image: node:alpine
+    command: ["npm", "start"]
+    depends_on:
+      - api-gateway
+    networks:
+      - frontend
+      - internal
+
+  # API Layer
+  api-gateway:
+    image: nginx:latest
+    depends_on:
+      - auth-service
+      - user-service
+      - product-service
+    networks:
+      - frontend
+      - internal
+
+  auth-service:
+    image: mcr.microsoft.com/dotnet/aspnet:6.0
+    depends_on:
+      - redis
+      - mongodb
+    networks:
+      - internal
+
+  user-service:
+    image: mcr.microsoft.com/dotnet/aspnet:6.0
+    depends_on:
+      - mongodb
+    networks:
+      - internal
+
+  product-service:
+    image: mcr.microsoft.com/dotnet/aspnet:6.0
+    depends_on:
+      - postgres
+    networks:
+      - internal
+
+  # Data Layer
+  mongodb:
+    image: mongo:latest
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_PASSWORD: example
+    networks:
+      - internal
+
+  redis:
+    image: redis:alpine
+    networks:
+      - internal
+
+networks:
+  frontend:
+  internal:

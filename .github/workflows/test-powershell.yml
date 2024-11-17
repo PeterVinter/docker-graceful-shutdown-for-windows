@@ -1,0 +1,48 @@
+name: PowerShell Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Start Docker Desktop
+      run: |
+        # Wait for Docker to start
+        $retries = 0
+        do {
+          Start-Sleep -s 5
+          $retries++
+          docker info
+        } while ($LASTEXITCODE -ne 0 -and $retries -lt 12)
+      shell: powershell
+    
+    - name: Install Pester
+      run: |
+        Install-Module -Name Pester -Force -SkipPublisherCheck
+        Import-Module Pester
+      shell: powershell
+    
+    - name: Run Basic Tests
+      run: |
+        Invoke-Pester ./tests/Test-DockerGracefulShutdown.ps1 -Output Detailed
+      shell: powershell
+    
+    - name: Run Dependency Tests
+      run: |
+        Invoke-Pester ./tests/Test-Dependencies.ps1 -Output Detailed
+      shell: powershell
+      
+    - name: Check Script Analysis
+      run: |
+        Install-Module -Name PSScriptAnalyzer -Force
+        Import-Module PSScriptAnalyzer
+        Invoke-ScriptAnalyzer -Path . -Recurse
+      shell: powershell
