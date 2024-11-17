@@ -155,6 +155,44 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - Coding standards
 - Development process
 
+## Development Setup
+
+### Prerequisites for Development
+- Windows 10/11
+- PowerShell 5.1 or higher
+- Docker Desktop for Windows
+- Git
+- Your favorite code editor (VS Code recommended)
+
+### Development Environment Setup
+1. Clone the repository
+   ```bash
+   git clone https://github.com/PeterVinter/docker-graceful-shutdown-for-windows.git
+   cd docker-graceful-shutdown-for-windows
+   ```
+
+2. Set up PowerShell execution policy (if needed)
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+3. Test the scripts
+   ```cmd
+   shutdownallcontainers.cmd -test
+   ```
+
+### Code Style Guidelines
+- Use clear, descriptive variable names
+- Add comments for complex logic
+- Follow [PowerShell Best Practices](https://docs.microsoft.com/en-us/powershell/scripting/developer/cmdlet/cmdlet-development-guidelines)
+
+### Testing
+Before submitting changes:
+1. Run the script with `-test` parameter
+2. Test with various container configurations
+3. Verify proper error handling
+4. Check script performance
+
 ## License
 
 MIT License - Feel free to modify and distribute
