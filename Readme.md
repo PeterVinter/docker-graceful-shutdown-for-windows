@@ -4,7 +4,7 @@ A PowerShell-based utility for gracefully shutting down Docker containers with d
 
 ## Files Explained
 
-### DockerShutdown.cmd
+### shutdownallcontainers.cmd
 
 ```batch
 @echo off
@@ -93,7 +93,7 @@ Orchestrates the entire shutdown process.
 ## Usage
 
 1. Place both files in the same directory
-2. Run `DockerShutdown.cmd`
+2. Run `shutdownallcontainers.cmd`
 3. Watch the progress as containers are gracefully stopped
 
 ## Example Output
